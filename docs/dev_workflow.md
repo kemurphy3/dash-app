@@ -1,5 +1,4 @@
-# docs/DEV_WORKFLOW.md
-# DASH Development Workflow (Cursor + Real Testing)
+# DASH Development Workflow
 
 This is the single source of truth for how changes are made, verified, and committed.
 
@@ -29,7 +28,7 @@ If you do not have it, add:
 - `"typecheck": "tsc -p tsconfig.json --noEmit"`
 
 ### Gate 3: Expo Doctor
-- `npx expo doctor`
+- `npx expo-doctor`
 
 ### Gate 4: Boot Smoke Test
 - `npx expo start`
@@ -38,8 +37,12 @@ If you do not have it, add:
 - Navigate to the first actionable screen
 
 ## Fix First, Test Second
-1) Run `cursor_fix_bugs.md` until gates pass.
-2) Run `cursor_test_instructions.md` end-to-end.
+1) Run `docs/archive/test-guides/fix_issues_runbook.md` until gates pass.
+2) Run `docs/archive/test-guides/runtime_test_runbook.md` end-to-end.
+
+## Historical Docs
+- Archived runbooks and historical testing notes live in `docs/archive/`.
+- Dated runtime evidence remains in `docs/test-runs/`.
 
 ## How to Handle Failures
 ### Minor issue

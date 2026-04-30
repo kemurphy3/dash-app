@@ -2,8 +2,7 @@
 ---
 
 ```md
-# cursor_test_instructions.md
-# DASH MVP: Real Testing Instructions (After Bug Fixes)
+# DASH MVP: Runtime Testing Runbook (After Fixes)
 
 Goal: Run real, repeatable tests on the working build. Capture evidence for failures. Fix minor issues immediately. Add major issues to backlog.
 
@@ -246,7 +245,7 @@ If Option A is implemented, do not test Option B.
 
 ---
 
-# Reporting Format (Cursor Must Produce After Testing)
+# Reporting Format (Post-Test Summary)
 ## Test Run Log
 - Date
 - Device (iOS or Android)

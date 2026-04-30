@@ -67,7 +67,7 @@ The following require device/simulator testing:
    - Navigate to first actionable screen
 
 3. **Execute Manual Tests:**
-   - Follow `cursor_test_instructions.md` phases 3.2, 3.3, 4.2, 6.3
+   - Follow `runtime_test_runbook.md` phases 3.2, 3.3, 4.2, 6.3
    - Document results in `TEST_RESULTS.md`
 
 4. **Final Report:**

@@ -1,7 +1,6 @@
-# cursor_fix_bugs.md
-# DASH MVP: Fix Bugs First (Cursor Execution Plan)
+# DASH MVP: Fix Issues First Runbook
 
-Goal: Get the app to a clean boot and clean TypeScript compile, then lock in database helpers and notification basics. This file is for fixes only. Testing walkthrough is in cursor_test_instructions.md.
+Goal: Get the app to a clean boot and clean TypeScript compile, then lock in database helpers and notification basics. This file is for fixes only. Testing walkthrough is in `runtime_test_runbook.md`.
 
 ## Rules (No Vibes)
 After each major section below, you must run and record:

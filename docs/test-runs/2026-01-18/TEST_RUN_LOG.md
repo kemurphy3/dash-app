@@ -1,7 +1,7 @@
 # DASH MVP Test Run Log
 **Date:** 2026-01-18  
 **Device:** N/A (Build verification only)  
-**Tester:** Cursor AI
+**Tester:** Automated assistant
 
 ## Initial Commands
 

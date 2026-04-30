@@ -143,7 +143,7 @@ Full testing requires a mobile device/simulator. However, I can verify:
 
 ### 3.2 Skip Behavior - Code Analysis
 
-**Expected Behavior (per cursor_test_instructions.md):**
+**Expected Behavior (per runtime_test_runbook.md):**
 - Skip before 20:00 → defer +60 minutes
 - Skip after 20:00 → defer to next day at trigger_time
 

@@ -141,7 +141,7 @@ The user made the plan with ChatGPT. DASH trusts their decision.
 ### 4. Multi-Week Support
 Plans can span weeks (e.g., 12-week marathon program):
 - Playbooks have `week_start` and `week_end`
-- DASH auto-advances the week
+- DASH advances week counters on app open when a new week is detected
 - Different playbooks activate as weeks progress
 
 ### 5. Day Filtering  
