@@ -13,13 +13,14 @@ import {
   DomainStat,
 } from '../types';
 import { getTodayDateString, getWeekRange } from '../utils/date';
+import { getAllAsync, getFirstAsync, runAsync } from './sqlite';
 
 // ============================================================
 // DOMAIN QUERIES
 // ============================================================
 
-export async function getDomains(db: SQLite.SQLiteDatabase): Promise<Domain[]> {
-  const results = await db.getAllAsync<{
+export async function getDomains(): Promise<Domain[]> {
+  const results = await getAllAsync<{
     id: string;
     type: string;
     trigger_time: string;
@@ -29,7 +30,15 @@ export async function getDomains(db: SQLite.SQLiteDatabase): Promise<Domain[]> {
     updated_at: string;
   }>('SELECT * FROM domains ORDER BY trigger_time');
   
-  return results.map(row => ({
+  return results.map((row: {
+    id: string;
+    type: string;
+    trigger_time: string;
+    active_playbook_id: string | null;
+    notifications_enabled: number;
+    created_at: string;
+    updated_at: string;
+  }) => ({
     id: row.id,
     type: row.type as DomainType,
     triggerTime: row.trigger_time,
@@ -40,8 +49,8 @@ export async function getDomains(db: SQLite.SQLiteDatabase): Promise<Domain[]> {
   }));
 }
 
-export async function getDomainById(db: SQLite.SQLiteDatabase, id: string): Promise<Domain | null> {
-  const row = await db.getFirstAsync<{
+export async function getDomainById(id: string): Promise<Domain | null> {
+  const row = await getFirstAsync<{
     id: string;
     type: string;
     trigger_time: string;
@@ -64,8 +73,8 @@ export async function getDomainById(db: SQLite.SQLiteDatabase, id: string): Prom
   };
 }
 
-export async function getDomainByType(db: SQLite.SQLiteDatabase, type: DomainType): Promise<Domain | null> {
-  const row = await db.getFirstAsync<{
+export async function getDomainByType(type: DomainType): Promise<Domain | null> {
+  const row = await getFirstAsync<{
     id: string;
     type: string;
     trigger_time: string;
@@ -89,14 +98,13 @@ export async function getDomainByType(db: SQLite.SQLiteDatabase, type: DomainTyp
 }
 
 export async function createDomain(
-  db: SQLite.SQLiteDatabase,
   type: DomainType,
   triggerTime: string
 ): Promise<Domain> {
   const id = uuidv4();
   const now = new Date().toISOString();
   
-  await db.runAsync(
+  await runAsync(
     `INSERT INTO domains (id, type, trigger_time, created_at, updated_at) 
      VALUES (?, ?, ?, ?, ?)`,
     [id, type, triggerTime, now, now]
@@ -114,33 +122,30 @@ export async function createDomain(
 }
 
 export async function updateDomainTriggerTime(
-  db: SQLite.SQLiteDatabase,
   domainId: string,
   triggerTime: string
 ): Promise<void> {
-  await db.runAsync(
+  await runAsync(
     `UPDATE domains SET trigger_time = ?, updated_at = datetime('now') WHERE id = ?`,
     [triggerTime, domainId]
   );
 }
 
 export async function updateDomainActivePlaybook(
-  db: SQLite.SQLiteDatabase,
   domainId: string,
   playbookId: string
 ): Promise<void> {
-  await db.runAsync(
+  await runAsync(
     `UPDATE domains SET active_playbook_id = ?, updated_at = datetime('now') WHERE id = ?`,
     [playbookId, domainId]
   );
 }
 
 export async function updateDomainNotifications(
-  db: SQLite.SQLiteDatabase,
   domainId: string,
   enabled: boolean
 ): Promise<void> {
-  await db.runAsync(
+  await runAsync(
     `UPDATE domains SET notifications_enabled = ?, updated_at = datetime('now') WHERE id = ?`,
     [enabled ? 1 : 0, domainId]
   );
@@ -151,10 +156,9 @@ export async function updateDomainNotifications(
 // ============================================================
 
 export async function getPlaybookById(
-  db: SQLite.SQLiteDatabase,
   id: string
 ): Promise<Playbook | null> {
-  const row = await db.getFirstAsync<{
+  const row = await getFirstAsync<{
     id: string;
     domain_id: string;
     name: string;
@@ -176,13 +180,12 @@ export async function getPlaybookById(
 }
 
 export async function getPlaybookWithTasks(
-  db: SQLite.SQLiteDatabase,
   playbookId: string
 ): Promise<PlaybookWithTasks | null> {
-  const playbook = await getPlaybookById(db, playbookId);
+  const playbook = await getPlaybookById(playbookId);
   if (!playbook) return null;
   
-  const tasks = await getTasksForPlaybook(db, playbookId);
+  const tasks = await getTasksForPlaybook(playbookId);
   
   return {
     ...playbook,
@@ -191,10 +194,9 @@ export async function getPlaybookWithTasks(
 }
 
 export async function getPlaybooksForDomain(
-  db: SQLite.SQLiteDatabase,
   domainId: string
 ): Promise<Playbook[]> {
-  const results = await db.getAllAsync<{
+  const results = await getAllAsync<{
     id: string;
     domain_id: string;
     name: string;
@@ -203,7 +205,14 @@ export async function getPlaybooksForDomain(
     updated_at: string;
   }>('SELECT * FROM playbooks WHERE domain_id = ? AND is_template = 0 ORDER BY created_at DESC', [domainId]);
   
-  return results.map(row => ({
+  return results.map((row: {
+    id: string;
+    domain_id: string;
+    name: string;
+    is_template: number;
+    created_at: string;
+    updated_at: string;
+  }) => ({
     id: row.id,
     domainId: row.domain_id,
     name: row.name,
@@ -214,7 +223,6 @@ export async function getPlaybooksForDomain(
 }
 
 export async function createPlaybook(
-  db: SQLite.SQLiteDatabase,
   domainId: string,
   name: string,
   isTemplate: boolean = false
@@ -222,7 +230,7 @@ export async function createPlaybook(
   const id = uuidv4();
   const now = new Date().toISOString();
   
-  await db.runAsync(
+  await runAsync(
     `INSERT INTO playbooks (id, domain_id, name, is_template, created_at, updated_at) 
      VALUES (?, ?, ?, ?, ?, ?)`,
     [id, domainId, name, isTemplate ? 1 : 0, now, now]
@@ -239,22 +247,20 @@ export async function createPlaybook(
 }
 
 export async function updatePlaybookName(
-  db: SQLite.SQLiteDatabase,
   playbookId: string,
   name: string
 ): Promise<void> {
-  await db.runAsync(
+  await runAsync(
     `UPDATE playbooks SET name = ?, updated_at = datetime('now') WHERE id = ?`,
     [name, playbookId]
   );
 }
 
 export async function deletePlaybook(
-  db: SQLite.SQLiteDatabase,
   playbookId: string
 ): Promise<void> {
   // Tasks will be cascade deleted due to foreign key
-  await db.runAsync('DELETE FROM playbooks WHERE id = ?', [playbookId]);
+  await runAsync('DELETE FROM playbooks WHERE id = ?', [playbookId]);
 }
 
 // ============================================================
@@ -262,10 +268,9 @@ export async function deletePlaybook(
 // ============================================================
 
 export async function getTasksForPlaybook(
-  db: SQLite.SQLiteDatabase,
   playbookId: string
 ): Promise<Task[]> {
-  const results = await db.getAllAsync<{
+  const results = await getAllAsync<{
     id: string;
     playbook_id: string;
     title: string;
@@ -276,7 +281,16 @@ export async function getTasksForPlaybook(
     updated_at: string;
   }>('SELECT * FROM tasks WHERE playbook_id = ? ORDER BY sort_order', [playbookId]);
   
-  return results.map(row => ({
+  return results.map((row: {
+    id: string;
+    playbook_id: string;
+    title: string;
+    description: string | null;
+    duration_minutes: number;
+    sort_order: number;
+    created_at: string;
+    updated_at: string;
+  }) => ({
     id: row.id,
     playbookId: row.playbook_id,
     title: row.title,
@@ -289,10 +303,9 @@ export async function getTasksForPlaybook(
 }
 
 export async function getTaskById(
-  db: SQLite.SQLiteDatabase,
   taskId: string
 ): Promise<Task | null> {
-  const row = await db.getFirstAsync<{
+  const row = await getFirstAsync<{
     id: string;
     playbook_id: string;
     title: string;
@@ -318,7 +331,6 @@ export async function getTaskById(
 }
 
 export async function createTask(
-  db: SQLite.SQLiteDatabase,
   playbookId: string,
   title: string,
   description: string | null,
@@ -328,7 +340,7 @@ export async function createTask(
   const id = uuidv4();
   const now = new Date().toISOString();
   
-  await db.runAsync(
+  await runAsync(
     `INSERT INTO tasks (id, playbook_id, title, description, duration_minutes, sort_order, created_at, updated_at) 
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, playbookId, title, description, durationMinutes, sortOrder, now, now]
@@ -347,7 +359,6 @@ export async function createTask(
 }
 
 export async function updateTask(
-  db: SQLite.SQLiteDatabase,
   taskId: string,
   updates: Partial<Pick<Task, 'title' | 'description' | 'durationMinutes' | 'sortOrder'>>
 ): Promise<void> {
@@ -376,25 +387,23 @@ export async function updateTask(
   setClauses.push("updated_at = datetime('now')");
   values.push(taskId);
   
-  await db.runAsync(
+  await runAsync(
     `UPDATE tasks SET ${setClauses.join(', ')} WHERE id = ?`,
     values
   );
 }
 
 export async function deleteTask(
-  db: SQLite.SQLiteDatabase,
   taskId: string
 ): Promise<void> {
-  await db.runAsync('DELETE FROM tasks WHERE id = ?', [taskId]);
+  await runAsync('DELETE FROM tasks WHERE id = ?', [taskId]);
 }
 
 export async function reorderTasks(
-  db: SQLite.SQLiteDatabase,
   taskIds: string[]
 ): Promise<void> {
   for (let i = 0; i < taskIds.length; i++) {
-    await db.runAsync(
+    await runAsync(
       `UPDATE tasks SET sort_order = ?, updated_at = datetime('now') WHERE id = ?`,
       [i, taskIds[i]]
     );
@@ -406,46 +415,56 @@ export async function reorderTasks(
 // ============================================================
 
 export async function getTaskLogsForDate(
-  db: SQLite.SQLiteDatabase,
   domainId: string,
   date: string
 ): Promise<TaskLog[]> {
-  const results = await db.getAllAsync<{
+  const results = await getAllAsync<{
     id: string;
     task_id: string;
     domain_id: string;
     scheduled_date: string;
     status: string;
     completed_at: string | null;
+    deferred_to: string | null;
     created_at: string;
   }>(
     'SELECT * FROM task_logs WHERE domain_id = ? AND scheduled_date = ?',
     [domainId, date]
   );
   
-  return results.map(row => ({
-    id: row.id,
-    taskId: row.task_id,
-    domainId: row.domain_id,
-    scheduledDate: row.scheduled_date,
-    status: row.status as TaskStatus,
-    completedAt: row.completed_at,
-    createdAt: row.created_at,
-  }));
-}
-
-export async function getTaskLogForTask(
-  db: SQLite.SQLiteDatabase,
-  taskId: string,
-  date: string
-): Promise<TaskLog | null> {
-  const row = await db.getFirstAsync<{
+  return results.map((row: {
     id: string;
     task_id: string;
     domain_id: string;
     scheduled_date: string;
     status: string;
     completed_at: string | null;
+    deferred_to: string | null;
+    created_at: string;
+  }) => ({
+    id: row.id,
+    taskId: row.task_id,
+    domainId: row.domain_id,
+    scheduledDate: row.scheduled_date,
+    status: row.status as TaskStatus,
+    completedAt: row.completed_at,
+    deferredTo: row.deferred_to,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function getTaskLogForTask(
+  taskId: string,
+  date: string
+): Promise<TaskLog | null> {
+  const row = await getFirstAsync<{
+    id: string;
+    task_id: string;
+    domain_id: string;
+    scheduled_date: string;
+    status: string;
+    completed_at: string | null;
+    deferred_to: string | null;
     created_at: string;
   }>(
     'SELECT * FROM task_logs WHERE task_id = ? AND scheduled_date = ?',
@@ -461,23 +480,23 @@ export async function getTaskLogForTask(
     scheduledDate: row.scheduled_date,
     status: row.status as TaskStatus,
     completedAt: row.completed_at,
+    deferredTo: row.deferred_to,
     createdAt: row.created_at,
   };
 }
 
 export async function createOrGetTaskLog(
-  db: SQLite.SQLiteDatabase,
   taskId: string,
   domainId: string,
   date: string
 ): Promise<TaskLog> {
-  const existing = await getTaskLogForTask(db, taskId, date);
+  const existing = await getTaskLogForTask(taskId, date);
   if (existing) return existing;
   
   const id = uuidv4();
   const now = new Date().toISOString();
   
-  await db.runAsync(
+  await runAsync(
     `INSERT INTO task_logs (id, task_id, domain_id, scheduled_date, status, created_at) 
      VALUES (?, ?, ?, ?, 'pending', ?)`,
     [id, taskId, domainId, date, now]
@@ -490,25 +509,25 @@ export async function createOrGetTaskLog(
     scheduledDate: date,
     status: 'pending',
     completedAt: null,
+    deferredTo: null,
     createdAt: now,
   };
 }
 
 export async function updateTaskLogStatus(
-  db: SQLite.SQLiteDatabase,
   logId: string,
-  status: TaskStatus
+  status: TaskStatus,
+  deferredTo: string | null = null
 ): Promise<void> {
   const completedAt = status === 'completed' ? new Date().toISOString() : null;
   
-  await db.runAsync(
-    `UPDATE task_logs SET status = ?, completed_at = ? WHERE id = ?`,
-    [status, completedAt, logId]
+  await runAsync(
+    `UPDATE task_logs SET status = ?, completed_at = ?, deferred_to = ? WHERE id = ?`,
+    [status, completedAt, deferredTo, logId]
   );
 }
 
 export async function getWeeklyStats(
-  db: SQLite.SQLiteDatabase,
   weekStart?: string,
   weekEnd?: string
 ): Promise<WeeklyStats> {
@@ -517,7 +536,7 @@ export async function getWeeklyStats(
     : getWeekRange();
   
   // Get all logs for the week
-  const logs = await db.getAllAsync<{
+  const logs = await getAllAsync<{
     id: string;
     task_id: string;
     domain_id: string;
@@ -532,8 +551,8 @@ export async function getWeeklyStats(
   );
   
   const totalTasks = logs.length;
-  const completedTasks = logs.filter(l => l.status === 'completed').length;
-  const skippedTasks = logs.filter(l => l.status === 'skipped').length;
+  const completedTasks = logs.filter((l: { status: string }) => l.status === 'completed').length;
+  const skippedTasks = logs.filter((l: { status: string }) => l.status === 'skipped').length;
   
   // Calculate domain stats
   const domainStatsMap = new Map<DomainType, { total: number; completed: number }>();
@@ -557,10 +576,10 @@ export async function getWeeklyStats(
   
   // Find most skipped task
   const skippedTaskCounts = new Map<string, { title: string; count: number }>();
-  const skippedLogs = logs.filter(l => l.status === 'skipped');
+  const skippedLogs = logs.filter((l: { status: string }) => l.status === 'skipped');
   
   for (const log of skippedLogs) {
-    const task = await getTaskById(db, log.task_id);
+    const task = await getTaskById(log.task_id);
     if (task) {
       const current = skippedTaskCounts.get(log.task_id) || { title: task.title, count: 0 };
       current.count++;
@@ -604,10 +623,9 @@ export async function getWeeklyStats(
 // ============================================================
 
 export async function getSetting(
-  db: SQLite.SQLiteDatabase,
   key: string
 ): Promise<string | null> {
-  const row = await db.getFirstAsync<{ value: string }>(
+  const row = await getFirstAsync<{ value: string }>(
     'SELECT value FROM settings WHERE key = ?',
     [key]
   );
@@ -615,22 +633,21 @@ export async function getSetting(
 }
 
 export async function setSetting(
-  db: SQLite.SQLiteDatabase,
   key: string,
   value: string
 ): Promise<void> {
-  await db.runAsync(
+  await runAsync(
     `INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`,
     [key, value]
   );
 }
 
-export async function getSettings(db: SQLite.SQLiteDatabase): Promise<Settings> {
-  const hasCompletedOnboarding = (await getSetting(db, 'has_completed_onboarding')) === 'true';
-  const quietHoursEnabled = (await getSetting(db, 'quiet_hours_enabled')) === 'true';
-  const quietHoursStart = (await getSetting(db, 'quiet_hours_start')) || '22:00';
-  const quietHoursEnd = (await getSetting(db, 'quiet_hours_end')) || '07:00';
-  const streaksEnabled = (await getSetting(db, 'streaks_enabled')) === 'true';
+export async function getSettings(): Promise<Settings> {
+  const hasCompletedOnboarding = (await getSetting('has_completed_onboarding')) === 'true';
+  const quietHoursEnabled = (await getSetting('quiet_hours_enabled')) === 'true';
+  const quietHoursStart = (await getSetting('quiet_hours_start')) || '22:00';
+  const quietHoursEnd = (await getSetting('quiet_hours_end')) || '07:00';
+  const streaksEnabled = (await getSetting('streaks_enabled')) === 'true';
   
   return {
     hasCompletedOnboarding,
@@ -646,24 +663,23 @@ export async function getSettings(db: SQLite.SQLiteDatabase): Promise<Settings> 
 // ============================================================
 
 export async function createPlaybookFromTemplate(
-  db: SQLite.SQLiteDatabase,
   domainId: string,
   templateName: string,
   templateTasks: Array<{ title: string; description: string | null; durationMinutes: number }>
 ): Promise<PlaybookWithTasks> {
   // Create the playbook
-  const playbook = await createPlaybook(db, domainId, templateName, false);
+  const playbook = await createPlaybook(domainId, templateName, false);
   
   // Create the tasks
   const tasks: Task[] = [];
   for (let i = 0; i < templateTasks.length; i++) {
     const t = templateTasks[i];
-    const task = await createTask(db, playbook.id, t.title, t.description, t.durationMinutes, i);
+    const task = await createTask(playbook.id, t.title, t.description, t.durationMinutes, i);
     tasks.push(task);
   }
   
   // Set as active playbook for domain
-  await updateDomainActivePlaybook(db, domainId, playbook.id);
+  await updateDomainActivePlaybook(domainId, playbook.id);
   
   return {
     ...playbook,

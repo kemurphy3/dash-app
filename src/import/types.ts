@@ -98,8 +98,8 @@ export const VALID_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as c
 
 export const DEFAULT_TRIGGER_TIMES: Record<DomainType, string> = {
   morning: '07:00',
-  exercise: '17:00',
-  evening: '21:00',
+  exercise: '07:30',
+  evening: '21:30',
 };
 
 export const DEFAULT_TASK_DURATION = 5; // minutes

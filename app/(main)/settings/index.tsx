@@ -21,7 +21,7 @@ import {
   rescheduleDomainNotifications,
   cancelDomainNotifications,
 } from '../../../src/notifications';
-import { getDatabase } from '../../../src/db';
+import { execAsync, runAsync } from '../../../src/db';
 import Constants from 'expo-constants';
 
 export default function SettingsScreen() {
@@ -114,17 +114,15 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const db = getDatabase();
-              
               await cancelAllNotifications();
               
-              await db.execAsync('DELETE FROM task_logs');
-              await db.execAsync('DELETE FROM tasks');
-              await db.execAsync('DELETE FROM playbooks');
-              await db.execAsync('DELETE FROM domains');
-              await db.execAsync('DELETE FROM plans');
+              await execAsync('DELETE FROM task_logs');
+              await execAsync('DELETE FROM tasks');
+              await execAsync('DELETE FROM playbooks');
+              await execAsync('DELETE FROM domains');
+              await execAsync('DELETE FROM plans');
               
-              await db.runAsync(
+              await runAsync(
                 "UPDATE settings SET value = 'false' WHERE key = 'has_completed_onboarding'"
               );
               

@@ -1,172 +1,106 @@
-# DASH App Bug Fix Instructions
+# cursor_fix_bugs.md
+# DASH MVP: Fix Bugs First (Cursor Execution Plan)
 
-## Context
-This is an Expo React Native TypeScript app using expo-sqlite for local storage. The codebase has 78 TypeScript errors that must be fixed before the app can run.
+Goal: Get the app to a clean boot and clean TypeScript compile, then lock in database helpers and notification basics. This file is for fixes only. Testing walkthrough is in cursor_test_instructions.md.
 
-**Repo:** https://github.com/kemurphy3/dash-app.git
-**Local path:** C:\Users\kemur\Git\dash-app
+## Rules (No Vibes)
+After each major section below, you must run and record:
+1) `npm run typecheck`
+2) If typecheck passes: `npx expo start` and confirm the app boots without a red screen.
 
-## Critical Issue: expo-sqlite API Mismatch
+If any step fails:
+- Stop and fix immediately.
+- Capture evidence (logs, screenshots).
+- Do not proceed until the section gate passes.
 
-The code was written for **expo-sqlite SDK 51+** (newer async API), but the project has **expo-sqlite 13.2.2** (SDK 50) which uses a different API.
+Store evidence in: `docs/test-runs/YYYY-MM-DD/`
 
-### What's wrong:
-- `SQLite.openDatabaseAsync()` does NOT exist → use `openDatabase()` (synchronous)
-- `db.runAsync()` does NOT exist
-- `db.getAllAsync()` does NOT exist  
-- `db.getFirstAsync()` does NOT exist
-- `db.execAsync(sql)` does NOT work → signature is `execAsync(queries: Query[], readOnly: boolean)`
+## Evidence to Capture for Every Failure
+- Terminal output (full output for the failing command).
+- Red screen stack trace screenshot (if present).
+- The file path(s) you modified.
+- The verification command(s) you re-ran.
 
-### Available API (from node_modules/expo-sqlite/build/SQLite.d.ts):
-```typescript
-class SQLiteDatabase {
-  exec(queries: Query[], readOnly: boolean, callback: SQLiteCallback): void;
-  execAsync(queries: Query[], readOnly: boolean): Promise;
-  transactionAsync(asyncCallback: SQLTransactionAsyncCallback, readOnly?: boolean): Promise;
-  transaction(callback: SQLTransactionCallback, ...): void;
-  closeAsync(): Promise;
+---
+
+# Phase 0: Repo Hygiene Gate
+## 0.1 Confirm .gitignore is protecting you
+Verify `.gitignore` exists at repo root and includes at minimum:
+- `node_modules/`
+- `.expo/`
+- `.expo-shared/`
+- `dist/`, `build/`
+- `android/build/`, `android/app/build/`, `.gradle/`, `.cxx/`
+- `ios/build/`
+- `.cache/`
+
+Run:
+- `git status`
+
+If `node_modules/` or build artifacts show up, stop and fix `.gitignore` first.
+
+Gate:
+- `git status` does not list `node_modules/` or build artifacts.
+
+---
+
+# Phase 1: TypeScript and Expo Boot Gate
+## 1.1 Install dependencies
+Run:
+- `npm install`
+
+If this fails, capture logs and resolve before continuing.
+
+## 1.2 Typecheck baseline
+Run:
+- `npm run typecheck`
+
+If you do not have a typecheck script, add it to package.json:
+- `"typecheck": "tsc -p tsconfig.json --noEmit"`
+
+Gate:
+- Typecheck passes or the remaining errors are known and explicitly listed as the next fixes.
+
+---
+
+# Phase 2: Fix expo-sqlite API mismatch and DB helpers
+Problem: expo-sqlite API differs by version. Older patterns like `db.transaction` and callback APIs will fail in newer versions. You need one consistent DB layer.
+
+## 2.1 Confirm expo-sqlite version
+Check package.json dependency for expo-sqlite.
+
+Decision:
+- Use `openDatabaseSync` plus async helpers (recommended for MVP consistency).
+- Do not mix multiple sqlite access patterns across files.
+
+## 2.2 Implement a single DB wrapper module
+Create or update: `src/db/sqlite.ts`
+
+Paste this implementation and adapt paths as needed:
+
+```ts
+import * as SQLite from "expo-sqlite";
+
+export type RunResult = { lastInsertRowId: number; changes: number };
+
+export const db = SQLite.openDatabaseSync("dash.db");
+
+export async function execAsync(sql: string): Promise<void> {
+  // Use only for controlled migrations. Avoid semicolon splitting for arbitrary SQL.
+  await db.execAsync(sql);
 }
 
-// Transaction async callback gives you:
-interface SQLTransactionAsync {
-  executeSqlAsync(sqlStatement: string, args?: SQLStatementArg[]): Promise;
+export async function runAsync(sql: string, params: any[] = []): Promise<RunResult> {
+  const res = await db.runAsync(sql, params);
+  return { lastInsertRowId: res.lastInsertRowId ?? 0, changes: res.changes ?? 0 };
 }
 
-function openDatabase(name: string, ...): SQLiteDatabase;
-```
-
-### Fix Strategy:
-Create helper functions in `src/db/helpers.ts` that wrap `transactionAsync` to provide the missing methods:
-```typescript
-import { SQLiteDatabase } from 'expo-sqlite';
-
-type SQLParams = (string | number | null)[];
-
-export async function runAsync(
-  db: SQLiteDatabase,
-  sql: string,
-  params: SQLParams = []
-): Promise {
-  let result = { lastInsertRowId: 0, changes: 0 };
-  await db.transactionAsync(async (tx) => {
-    const r = await tx.executeSqlAsync(sql, params);
-    result = {
-      lastInsertRowId: r.insertId ?? 0,
-      changes: r.rowsAffected,
-    };
-  }, false);
-  return result;
+export async function getAllAsync<T>(sql: string, params: any[] = []): Promise<T[]> {
+  const rows = await db.getAllAsync(sql, params);
+  return rows as T[];
 }
 
-export async function getAllAsync(
-  db: SQLiteDatabase,
-  sql: string,
-  params: SQLParams = []
-): Promise {
-  let rows: T[] = [];
-  await db.transactionAsync(async (tx) => {
-    const result = await tx.executeSqlAsync(sql, params);
-    rows = result.rows._array as T[];
-  }, true);
-  return rows;
+export async function getFirstAsync<T>(sql: string, params: any[] = []): Promise<T | null> {
+  const row = await db.getFirstAsync(sql, params);
+  return (row as T) ?? null;
 }
-
-export async function getFirstAsync(
-  db: SQLiteDatabase,
-  sql: string,
-  params: SQLParams = []
-): Promise {
-  const rows = await getAllAsync(db, sql, params);
-  return rows[0] ?? null;
-}
-
-export async function execAsync(
-  db: SQLiteDatabase,
-  sql: string
-): Promise {
-  await db.transactionAsync(async (tx) => {
-    const statements = sql.split(';').filter(s => s.trim());
-    for (const statement of statements) {
-      if (statement.trim()) {
-        await tx.executeSqlAsync(statement, []);
-      }
-    }
-  }, false);
-}
-```
-
-Then update all files to use these helpers instead of calling methods directly on `db`.
-
-## Files That Need Fixing (in order):
-
-### 1. Create: `src/db/helpers.ts`
-Create the helper file above.
-
-### 2. Fix: `src/db/index.ts`
-- Change `SQLite.openDatabaseAsync(DB_NAME)` → `openDatabase(DB_NAME)` 
-- Import from `expo-sqlite` not `* as SQLite`
-- Remove the `execAsync` call for PRAGMA (move to migrations)
-- Re-export helpers
-
-### 3. Fix: `src/db/migrations.ts`
-- Import and use `execAsync`, `getFirstAsync`, `runAsync` from `./helpers`
-- Replace all `db.execAsync()`, `db.getFirstAsync()`, `db.runAsync()` calls
-
-### 4. Fix: `src/db/queries.ts` (32 errors - largest file)
-- Import helpers from `./helpers`
-- Replace all `db.getAllAsync()` → `getAllAsync(db, ...)`
-- Replace all `db.getFirstAsync()` → `getFirstAsync(db, ...)`
-- Replace all `db.runAsync()` → `runAsync(db, ...)`
-- Add explicit types to all `.map()` and `.filter()` callbacks to fix implicit `any`
-
-### 5. Fix: `src/import/storage.ts` (14 errors)
-- Import helpers from `../db/helpers`
-- Replace all direct `db.*Async()` calls with helper functions
-
-### 6. Fix: `src/utils/weekProgression.ts` (12 errors)
-- Import helpers from `../db/helpers`
-- Replace all direct `db.*Async()` calls with helper functions
-- Add explicit types to `.filter()` and `.reduce()` callbacks
-
-### 7. Fix: `app/(main)/settings/index.tsx` (6 errors)
-- The reset function uses `db.execAsync()` and `db.runAsync()` directly
-- Import and use helpers instead
-
-## Secondary Issue: Style Prop Type Errors (5 errors)
-
-### What's wrong:
-`Card` and `Button` components have `style?: ViewStyle` but arrays are being passed.
-
-### Files affected:
-- `app/(main)/import/conflicts.tsx:67`
-- `app/(main)/import/preview.tsx:132`
-- `app/(main)/review/index.tsx:196`
-- `app/(main)/today/task.tsx:188`
-
-### Fix:
-Change the prop type in `src/components/Card.tsx` and `src/components/Button.tsx`:
-```typescript
-// Change this:
-style?: ViewStyle;
-
-// To this:
-style?: ViewStyle | ViewStyle[];
-```
-
-Or use `StyleProp<ViewStyle>` from react-native which handles both.
-
-## Verification
-
-After all fixes, run:
-```bash
-npm run typecheck
-```
-
-Expected output: `Found 0 errors`
-
-Then run:
-```bash
-npx expo start
-```
-
-App should boot without red screens.

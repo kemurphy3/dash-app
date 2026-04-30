@@ -3,7 +3,6 @@ import { DomainType, PlaybookTemplate } from '../types';
 import { getTemplatesForDomain, getTemplateById } from '../constants/templates';
 import { DOMAIN_INFO } from '../types';
 import { 
-  getDatabase, 
   createDomain, 
   createPlaybookFromTemplate,
   setSetting,
@@ -192,20 +191,18 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   },
   
   completeOnboarding: async () => {
-    const db = getDatabase();
     const domains = get().selectedDomains;
     
     // Create domains and playbooks
     for (const [, setup] of domains) {
       // Create the domain
-      const domain = await createDomain(db, setup.type, setup.triggerTime);
+      const domain = await createDomain(setup.type, setup.triggerTime);
       
       // Get the template
       const template = getTemplateById(setup.selectedTemplateId!);
       if (template) {
         // Create playbook from template
         await createPlaybookFromTemplate(
-          db,
           domain.id,
           template.name,
           template.tasks
@@ -214,7 +211,7 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     }
     
     // Mark onboarding complete
-    await setSetting(db, 'has_completed_onboarding', 'true');
+    await setSetting('has_completed_onboarding', 'true');
     
     // Reset the store
     get().reset();

@@ -123,31 +123,48 @@ export function getNextValidNotificationTime(
 }
 
 /**
+ * Calculate skip deferral time
+ * Rule: If before 20:00, defer +60 minutes. If after 20:00, defer to next day at trigger_time.
+ */
+export function calculateSkipDeferralTime(triggerTime: string): Date {
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentMinutes = now.getMinutes();
+  const currentTotalMinutes = currentHour * 60 + currentMinutes;
+  const twentyOClock = 20 * 60; // 20:00 in minutes
+  
+  if (currentTotalMinutes < twentyOClock) {
+    // Before 20:00: defer +60 minutes
+    return new Date(now.getTime() + 60 * 60 * 1000);
+  } else {
+    // After 20:00: defer to next day at trigger_time
+    const { hours, minutes } = parseTimeString(triggerTime);
+    const deferredDate = new Date(now);
+    deferredDate.setDate(deferredDate.getDate() + 1);
+    deferredDate.setHours(hours, minutes, 0, 0);
+    return deferredDate;
+  }
+}
+
+/**
  * Calculate snooze time
+ * Later Today rule: Defer to 17:00 local. If past 17:00, defer to +60 minutes.
  */
 export function calculateSnoozeTime(snoozeMinutes: number | 'later'): Date {
   const now = new Date();
   
   if (snoozeMinutes === 'later') {
-    // "Later Today" = 2 hours from now, or 8 PM if less than 2 hours until midnight
-    const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-    const eightPm = new Date(now);
-    eightPm.setHours(20, 0, 0, 0);
+    // "Later Today" = 17:00 (5 PM) local. If past 17:00, defer +60 minutes.
+    const fivePm = new Date(now);
+    fivePm.setHours(17, 0, 0, 0);
     
-    // If it's already past 8 PM, use 2 hours
-    if (now >= eightPm) {
-      return twoHoursLater;
+    // If it's already past 5 PM, use +60 minutes
+    if (now >= fivePm) {
+      return new Date(now.getTime() + 60 * 60 * 1000);
     }
     
-    // If 2 hours from now is past midnight, use 8 PM
-    const midnight = new Date(now);
-    midnight.setHours(24, 0, 0, 0);
-    
-    if (twoHoursLater >= midnight) {
-      return eightPm;
-    }
-    
-    return twoHoursLater;
+    // Otherwise, defer to 5 PM today
+    return fivePm;
   }
   
   return new Date(now.getTime() + snoozeMinutes * 60 * 1000);

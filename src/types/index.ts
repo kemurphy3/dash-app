@@ -47,6 +47,7 @@ export interface TaskLog {
   scheduledDate: string; // YYYY-MM-DD format
   status: TaskStatus;
   completedAt: string | null;
+  deferredTo: string | null; // ISO datetime string for when task should reappear
   createdAt: string;
 }
 

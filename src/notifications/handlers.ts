@@ -44,6 +44,7 @@ export function handleNotificationResponse(
   if (data.domainId) {
     // Small delay to ensure app is ready
     setTimeout(() => {
+      if (!data.domainId) return;
       router.push({
         pathname: '/(main)/today/task',
         params: { domainId: data.domainId },
@@ -97,6 +98,7 @@ export async function handleColdStartNotification(): Promise<void> {
     if (data.domainId) {
       // Navigate after a delay to ensure app is mounted
       setTimeout(() => {
+        if (!data.domainId) return;
         router.push({
           pathname: '/(main)/today/task',
           params: { domainId: data.domainId },

@@ -18,7 +18,7 @@ import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../../src/constan
 import { Button } from '../../../src/components/Button';
 import { Card } from '../../../src/components/Card';
 import { useImportStore } from '../../../src/stores/importStore';
-import { FRESH_START_PROMPT, EXPORT_EXISTING_PROMPT, PLAN_SUGGESTIONS } from '../../../src/import';
+import { FRESH_START_PROMPT, EXPORT_EXISTING_PROMPT, QUICK_EXPORT_PROMPT, PLAN_SUGGESTIONS } from '../../../src/import';
 
 export default function ImportScreen() {
   const insets = useSafeAreaInsets();
@@ -93,15 +93,23 @@ export default function ImportScreen() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Import Your Plan</Text>
           <Text style={styles.headerSubtitle}>
-            Paste the YAML export from ChatGPT below. DASH will turn it into executable daily actions.
+            Already have a plan written with ChatGPT? Paste it below. DASH accepts YAML (or JSON) and turns it into daily actions with real dates.
           </Text>
         </View>
         
         {/* Input area */}
+        <TouchableOpacity
+          style={styles.quickCopyButton}
+          onPress={() => handleCopyPrompt(QUICK_EXPORT_PROMPT, 'Quick Export')}
+          disabled={isValidating}
+        >
+          <Text style={styles.quickCopyButtonText}>Copy quick export prompt</Text>
+        </TouchableOpacity>
+
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.textInput}
-            placeholder="Paste your ChatGPT YAML export here..."
+            placeholder="Paste your ChatGPT export here (YAML or JSON)..."
             placeholderTextColor={COLORS.gray600}
             multiline
             value={rawInput}
@@ -135,14 +143,14 @@ export default function ImportScreen() {
             onPress={() => setShowPromptOptions(!showPromptOptions)}
           >
             <Text style={styles.helpToggleText}>
-              {showPromptOptions ? '▼' : '▶'} Don't have a plan yet?
+              {showPromptOptions ? '▼' : '▶'} Need a ChatGPT export prompt?
             </Text>
           </TouchableOpacity>
           
           {showPromptOptions && (
             <View style={styles.promptOptions}>
               <Text style={styles.promptDescription}>
-                Copy one of these prompts to ChatGPT to create a DASH-compatible plan:
+                Copy one of these prompts into ChatGPT, then paste the output here:
               </Text>
               
               {/* Fresh start prompt */}
@@ -152,7 +160,7 @@ export default function ImportScreen() {
               >
                 <Text style={styles.promptCardTitle}>🚀 Fresh Start</Text>
                 <Text style={styles.promptCardDescription}>
-                  Start a new conversation with ChatGPT. It will ask about your goals and create a personalized plan.
+                  Start from scratch with ChatGPT and get a phased plan (weeks/days) in DASH format.
                 </Text>
                 <Text style={styles.promptCardAction}>Tap to copy prompt</Text>
               </Card>
@@ -164,7 +172,7 @@ export default function ImportScreen() {
               >
                 <Text style={styles.promptCardTitle}>📤 Export Existing</Text>
                 <Text style={styles.promptCardDescription}>
-                  Already discussed a plan with ChatGPT? Paste this to convert it to DASH format.
+                  Already discussed a plan? Use this to export that existing chat in DASH-ready format.
                 </Text>
                 <Text style={styles.promptCardAction}>Tap to copy prompt</Text>
               </Card>
@@ -236,6 +244,21 @@ const styles = StyleSheet.create({
   inputContainer: {
     position: 'relative',
     marginBottom: SPACING.lg,
+  },
+  quickCopyButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.gray900,
+    borderColor: COLORS.gray700,
+    borderWidth: 1,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.full,
+    marginBottom: SPACING.md,
+  },
+  quickCopyButtonText: {
+    color: COLORS.accent,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
   },
   textInput: {
     backgroundColor: COLORS.gray900,

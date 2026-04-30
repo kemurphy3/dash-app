@@ -45,7 +45,8 @@ export function configureNotifications(): void {
   // Set notification handler for when app is in foreground
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: true,
       shouldSetBadge: false,
     }),

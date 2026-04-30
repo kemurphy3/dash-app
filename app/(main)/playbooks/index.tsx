@@ -2,10 +2,10 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
-import { Card } from '../../../src/components';
+import { Card, ImportButton } from '../../../src/components';
 import { COLORS, SPACING, FONT_SIZES, DOMAIN_COLORS, BORDER_RADIUS } from '../../../src/constants/theme';
 import { useAppStore } from '../../../src/stores/appStore';
-import { getDatabase, getPlaybookWithTasks } from '../../../src/db';
+import { getPlaybookWithTasks } from '../../../src/db';
 import { DOMAIN_INFO, Domain, PlaybookWithTasks } from '../../../src/types';
 import { formatTimeForDisplay, formatDuration } from '../../../src/utils/time';
 
@@ -19,13 +19,12 @@ export default function PlaybooksScreen() {
   const [domainsWithPlaybooks, setDomainsWithPlaybooks] = useState<DomainWithPlaybook[]>([]);
   
   const loadPlaybooks = useCallback(async () => {
-    const db = getDatabase();
     const results: DomainWithPlaybook[] = [];
     
     for (const domain of domains) {
       let playbook: PlaybookWithTasks | null = null;
       if (domain.activePlaybookId) {
-        playbook = await getPlaybookWithTasks(db, domain.activePlaybookId);
+        playbook = await getPlaybookWithTasks(domain.activePlaybookId);
       }
       results.push({ domain, playbook });
     }
@@ -53,6 +52,8 @@ export default function PlaybooksScreen() {
             Your pre-built routines. Tap to view or edit.
           </Text>
         </View>
+
+        <ImportButton variant="prominent" />
         
         {/* Playbook Cards */}
         <View style={styles.playbooks}>

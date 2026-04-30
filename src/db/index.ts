@@ -1,51 +1,54 @@
 import * as SQLite from 'expo-sqlite';
+import { db as sqliteDb, execAsync, getAllAsync, getFirstAsync, runAsync } from './sqlite';
 import { runMigrations } from './migrations';
 
-const DB_NAME = 'dash.db';
-
-let db: SQLite.SQLiteDatabase | null = null;
+let initialized = false;
 
 /**
  * Initialize the database connection and run migrations
  */
 export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
-  if (db) {
-    return db;
+  if (initialized) {
+    return sqliteDb;
   }
   
   console.log('[DB] Opening database...');
-  db = await SQLite.openDatabaseAsync(DB_NAME);
   
   // Enable foreign keys
-  await db.execAsync('PRAGMA foreign_keys = ON');
+  await execAsync('PRAGMA foreign_keys = ON');
   
   // Run migrations
-  await runMigrations(db);
+  await runMigrations();
   
+  initialized = true;
   console.log('[DB] Database initialized');
-  return db;
+  return sqliteDb;
 }
 
 /**
  * Get the database instance (must call initDatabase first)
  */
 export function getDatabase(): SQLite.SQLiteDatabase {
-  if (!db) {
+  if (!initialized) {
     throw new Error('Database not initialized. Call initDatabase() first.');
   }
-  return db;
+  return sqliteDb;
 }
 
 /**
  * Close the database connection
  */
 export async function closeDatabase(): Promise<void> {
-  if (db) {
-    await db.closeAsync();
-    db = null;
+  if (initialized) {
+    await sqliteDb.closeAsync();
+    initialized = false;
     console.log('[DB] Database closed');
   }
 }
+
+// Re-export wrapper functions
+export { db, execAsync, getAllAsync, getFirstAsync, runAsync } from './sqlite';
+export type { RunResult } from './sqlite';
 
 // Re-export everything from queries
 export * from './queries';

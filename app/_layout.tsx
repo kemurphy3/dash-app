@@ -1,10 +1,11 @@
+import 'react-native-get-random-values';
 import React, { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { initDatabase, getDatabase, getSettings } from '../src/db';
+import { initDatabase, getSettings } from '../src/db';
 import { useAppStore } from '../src/stores/appStore';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { 
@@ -31,8 +32,7 @@ export default function RootLayout() {
         configureNotifications();
         
         // Check onboarding status
-        const db = getDatabase();
-        const settings = await getSettings(db);
+        const settings = await getSettings();
         setHasCompletedOnboarding(settings.hasCompletedOnboarding);
         
         // Initialize app store

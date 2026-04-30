@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActionSheetIOS, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Button } from '../../../src/components';
@@ -108,23 +108,77 @@ export default function TaskScreen() {
     }
   };
   
-  const handleSnooze = async () => {
-    const snoozeMinutes = 30;
-    const snoozeUntil = calculateSnoozeTime(30);
-    
-    analytics.taskSnoozed(currentTask.id, domainState.domain.type, snoozeMinutes);
-    
-    await scheduleSnoozeNotification(
-      domainState.domain,
-      currentTask.title,
-      snoozeUntil
-    );
-    
-    Alert.alert(
-      'Snoozed for 30 minutes',
-      'We\'ll remind you soon.',
-      [{ text: 'OK', onPress: () => router.back() }]
-    );
+  const handleSnooze = () => {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', '10 minutes', '30 minutes', '60 minutes', 'Later Today'],
+          cancelButtonIndex: 0,
+        },
+        async (buttonIndex) => {
+          if (buttonIndex === 0) return; // Cancel
+          
+          let snoozeOption: 10 | 30 | 60 | 'later';
+          let snoozeLabel: string;
+          
+          if (buttonIndex === 1) {
+            snoozeOption = 10;
+            snoozeLabel = '10 minutes';
+          } else if (buttonIndex === 2) {
+            snoozeOption = 30;
+            snoozeLabel = '30 minutes';
+          } else if (buttonIndex === 3) {
+            snoozeOption = 60;
+            snoozeLabel = '60 minutes';
+          } else {
+            snoozeOption = 'later';
+            snoozeLabel = 'Later Today';
+          }
+          
+          await executeSnooze(snoozeOption, snoozeLabel);
+        }
+      );
+    } else {
+      // Android: Use Alert for simplicity
+      Alert.alert(
+        'Snooze for',
+        'Choose how long to snooze',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: '10 minutes', onPress: () => executeSnooze(10, '10 minutes') },
+          { text: '30 minutes', onPress: () => executeSnooze(30, '30 minutes') },
+          { text: '60 minutes', onPress: () => executeSnooze(60, '60 minutes') },
+          { text: 'Later Today', onPress: () => executeSnooze('later', 'Later Today') },
+        ]
+      );
+    }
+  };
+  
+  const executeSnooze = async (snoozeOption: 10 | 30 | 60 | 'later', snoozeLabel: string) => {
+    setIsProcessing(true);
+    try {
+      const snoozeUntil = calculateSnoozeTime(snoozeOption);
+      const snoozeMinutes = typeof snoozeOption === 'number' ? snoozeOption : 0;
+      
+      analytics.taskSnoozed(currentTask.id, domainState.domain.type, snoozeMinutes);
+      
+      await scheduleSnoozeNotification(
+        domainState.domain,
+        currentTask.title,
+        snoozeUntil
+      );
+      
+      Alert.alert(
+        `Snoozed for ${snoozeLabel}`,
+        'We\'ll remind you soon.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+    } catch (error) {
+      console.error('[Task] Snooze error:', error);
+      Alert.alert('Error', 'Failed to snooze task. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
   
   const taskNumber = domainState.currentTaskIndex + 1;
@@ -202,7 +256,7 @@ export default function TaskScreen() {
             onPress={handleSnooze}
             disabled={isProcessing}
           >
-            <Text style={styles.secondaryButtonText}>Snooze 30m</Text>
+            <Text style={styles.secondaryButtonText}>Snooze</Text>
           </TouchableOpacity>
         </View>
       </View>

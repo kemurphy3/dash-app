@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS task_logs (
   scheduled_date TEXT NOT NULL,
   status TEXT NOT NULL CHECK(status IN ('pending', 'completed', 'skipped')) DEFAULT 'pending',
   completed_at TEXT,
+  deferred_to TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
   FOREIGN KEY (domain_id) REFERENCES domains(id)

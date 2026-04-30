@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Domain, DomainType, Task } from '../types';
 import { DOMAIN_INFO } from '../types';
 import { parseTimeString, getDateForTimeToday, getDateForTimeTomorrow, hasTimePassed, getNextValidNotificationTime } from '../utils/time';
-import { getDatabase, getDomains, getPlaybookWithTasks, getSettings, getTaskLogsForDate } from '../db';
+import { getDomains, getPlaybookWithTasks, getSettings, getTaskLogsForDate } from '../db';
 import { getTodayDateString } from '../utils/date';
 
 // Notification identifier prefix
@@ -53,8 +53,7 @@ export async function scheduleDomainNotification(
   firstTaskTitle: string,
   triggerDate: Date
 ): Promise<string | null> {
-  const db = getDatabase();
-  const settings = await getSettings(db);
+  const settings = await getSettings();
   
   // Apply quiet hours if enabled
   const adjustedDate = getNextValidNotificationTime(
@@ -83,6 +82,7 @@ export async function scheduleDomainNotification(
       sound: true,
     },
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
       date: adjustedDate,
     },
     identifier: getNotificationId(domain.id, adjustedDate.toISOString()),
@@ -118,6 +118,7 @@ export async function scheduleSnoozeNotification(
       sound: true,
     },
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
       date: snoozeUntil,
     },
     identifier: getNotificationId(domain.id, `snooze_${snoozeUntil.toISOString()}`),
@@ -132,8 +133,7 @@ export async function scheduleSnoozeNotification(
  * Schedule all notifications for today and tomorrow
  */
 export async function scheduleAllNotifications(): Promise<void> {
-  const db = getDatabase();
-  const domains = await getDomains(db);
+  const domains = await getDomains();
   const today = getTodayDateString();
   
   // Cancel existing notifications first
@@ -151,8 +151,8 @@ export async function scheduleAllNotifications(): Promise<void> {
     }
     
     // Check if domain is already completed for today
-    const logs = await getTaskLogsForDate(db, domain.id, today);
-    const playbook = await getPlaybookWithTasks(db, domain.activePlaybookId);
+    const logs = await getTaskLogsForDate(domain.id, today);
+    const playbook = await getPlaybookWithTasks(domain.activePlaybookId);
     
     if (!playbook || playbook.tasks.length === 0) {
       continue;
@@ -194,8 +194,7 @@ export async function scheduleAllNotifications(): Promise<void> {
  * Reschedule notifications after a domain is updated
  */
 export async function rescheduleDomainNotifications(domainId: string): Promise<void> {
-  const db = getDatabase();
-  const domains = await getDomains(db);
+  const domains = await getDomains();
   const domain = domains.find(d => d.id === domainId);
   
   if (!domain) return;
@@ -207,13 +206,13 @@ export async function rescheduleDomainNotifications(domainId: string): Promise<v
     return;
   }
   
-  const playbook = await getPlaybookWithTasks(db, domain.activePlaybookId);
+  const playbook = await getPlaybookWithTasks(domain.activePlaybookId);
   if (!playbook || playbook.tasks.length === 0) {
     return;
   }
   
   const today = getTodayDateString();
-  const logs = await getTaskLogsForDate(db, domain.id, today);
+  const logs = await getTaskLogsForDate(domain.id, today);
   const logMap = new Map(logs.map(l => [l.taskId, l]));
   
   // Find first incomplete task

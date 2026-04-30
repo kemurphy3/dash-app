@@ -1,4 +1,3 @@
-import * as SQLite from 'expo-sqlite';
 import { v4 as uuidv4 } from 'uuid';
 import { ParsedPlan, ParsedDomain, ParsedPlaybook, ParsedTask } from './types';
 import { DomainType } from '../types';
@@ -7,6 +6,9 @@ import {
   createDomain, 
   updateDomainActivePlaybook,
   updateDomainTriggerTime,
+  execAsync,
+  runAsync,
+  getFirstAsync,
 } from '../db';
 
 // ============================================================
@@ -27,8 +29,8 @@ export interface Plan {
 /**
  * Create the plans table if it doesn't exist
  */
-export async function ensurePlanTable(db: SQLite.SQLiteDatabase): Promise<void> {
-  await db.execAsync(`
+export async function ensurePlanTable(): Promise<void> {
+  await execAsync(`
     CREATE TABLE IF NOT EXISTS plans (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -44,31 +46,31 @@ export async function ensurePlanTable(db: SQLite.SQLiteDatabase): Promise<void> 
   // Add columns to playbooks if they don't exist
   // SQLite doesn't have IF NOT EXISTS for ALTER TABLE, so we catch errors
   try {
-    await db.execAsync(`ALTER TABLE playbooks ADD COLUMN plan_id TEXT REFERENCES plans(id)`);
+    await execAsync(`ALTER TABLE playbooks ADD COLUMN plan_id TEXT REFERENCES plans(id)`);
   } catch (e) {
     // Column already exists
   }
   
   try {
-    await db.execAsync(`ALTER TABLE playbooks ADD COLUMN week_start INTEGER`);
+    await execAsync(`ALTER TABLE playbooks ADD COLUMN week_start INTEGER`);
   } catch (e) {
     // Column already exists
   }
   
   try {
-    await db.execAsync(`ALTER TABLE playbooks ADD COLUMN week_end INTEGER`);
+    await execAsync(`ALTER TABLE playbooks ADD COLUMN week_end INTEGER`);
   } catch (e) {
     // Column already exists
   }
   
   try {
-    await db.execAsync(`ALTER TABLE playbooks ADD COLUMN active_days TEXT`);
+    await execAsync(`ALTER TABLE playbooks ADD COLUMN active_days TEXT`);
   } catch (e) {
     // Column already exists
   }
   
   try {
-    await db.execAsync(`ALTER TABLE playbooks ADD COLUMN import_source TEXT`);
+    await execAsync(`ALTER TABLE playbooks ADD COLUMN import_source TEXT`);
   } catch (e) {
     // Column already exists
   }
@@ -78,7 +80,6 @@ export async function ensurePlanTable(db: SQLite.SQLiteDatabase): Promise<void> 
  * Create a new plan record
  */
 export async function createPlan(
-  db: SQLite.SQLiteDatabase,
   name: string,
   description: string | null,
   durationWeeks: number | null,
@@ -87,7 +88,7 @@ export async function createPlan(
   const id = uuidv4();
   const now = new Date().toISOString();
   
-  await db.runAsync(
+  await runAsync(
     `INSERT INTO plans (id, name, description, duration_weeks, current_week, import_source, import_date, created_at)
      VALUES (?, ?, ?, ?, 1, ?, ?, ?)`,
     [id, name, description, durationWeeks, importSource, now.split('T')[0], now]
@@ -109,10 +110,9 @@ export async function createPlan(
  * Get a plan by ID
  */
 export async function getPlanById(
-  db: SQLite.SQLiteDatabase,
   planId: string
 ): Promise<Plan | null> {
-  const row = await db.getFirstAsync<{
+  const row = await getFirstAsync<{
     id: string;
     name: string;
     description: string | null;
@@ -141,11 +141,10 @@ export async function getPlanById(
  * Update the current week for a plan
  */
 export async function updatePlanCurrentWeek(
-  db: SQLite.SQLiteDatabase,
   planId: string,
   week: number
 ): Promise<void> {
-  await db.runAsync(
+  await runAsync(
     'UPDATE plans SET current_week = ? WHERE id = ?',
     [week, planId]
   );
@@ -169,12 +168,11 @@ export interface ImportSaveResult {
  * This is the main function that orchestrates the entire import
  */
 export async function saveParsedPlan(
-  db: SQLite.SQLiteDatabase,
   parsedPlan: ParsedPlan,
   replaceExisting: boolean = true
 ): Promise<ImportSaveResult> {
   // Ensure tables exist
-  await ensurePlanTable(db);
+  await ensurePlanTable();
   
   let planId: string | null = null;
   let domainsCreated = 0;
@@ -184,7 +182,6 @@ export async function saveParsedPlan(
   try {
     // Create the plan record (for tracking and multi-week support)
     const plan = await createPlan(
-      db,
       parsedPlan.name,
       parsedPlan.description,
       parsedPlan.durationWeeks,
@@ -195,7 +192,6 @@ export async function saveParsedPlan(
     // Process each domain
     for (const parsedDomain of parsedPlan.domains) {
       const domainResult = await saveDomainFromImport(
-        db,
         parsedDomain,
         plan.id,
         replaceExisting
@@ -233,7 +229,6 @@ export async function saveParsedPlan(
  * Save a single domain from an import
  */
 async function saveDomainFromImport(
-  db: SQLite.SQLiteDatabase,
   parsedDomain: ParsedDomain,
   planId: string,
   replaceExisting: boolean
@@ -243,22 +238,22 @@ async function saveDomainFromImport(
   let domainCreated = false;
   
   // Check if domain already exists
-  let domain = await getDomainByType(db, parsedDomain.type);
+  let domain = await getDomainByType(parsedDomain.type);
   
   if (domain) {
     // Update trigger time
-    await updateDomainTriggerTime(db, domain.id, parsedDomain.triggerTime);
+    await updateDomainTriggerTime(domain.id, parsedDomain.triggerTime);
     
     // If replacing, delete existing playbooks for this domain
     if (replaceExisting) {
-      await db.runAsync(
+      await runAsync(
         'DELETE FROM playbooks WHERE domain_id = ?',
         [domain.id]
       );
     }
   } else {
     // Create new domain
-    domain = await createDomain(db, parsedDomain.type, parsedDomain.triggerTime);
+    domain = await createDomain(parsedDomain.type, parsedDomain.triggerTime);
     domainCreated = true;
   }
   
@@ -267,7 +262,6 @@ async function saveDomainFromImport(
   
   for (const parsedPlaybook of parsedDomain.playbooks) {
     const playbookResult = await savePlaybookFromImport(
-      db,
       parsedPlaybook,
       domain.id,
       planId
@@ -283,7 +277,7 @@ async function saveDomainFromImport(
   
   // Set the first playbook as active (or the one that matches current week/day)
   if (firstPlaybookId) {
-    await updateDomainActivePlaybook(db, domain.id, firstPlaybookId);
+    await updateDomainActivePlaybook(domain.id, firstPlaybookId);
   }
   
   return {
@@ -297,7 +291,6 @@ async function saveDomainFromImport(
  * Save a single playbook from an import
  */
 async function savePlaybookFromImport(
-  db: SQLite.SQLiteDatabase,
   parsedPlaybook: ParsedPlaybook,
   domainId: string,
   planId: string
@@ -310,7 +303,7 @@ async function savePlaybookFromImport(
     ? JSON.stringify(parsedPlaybook.activeDays)
     : null;
   
-  await db.runAsync(
+  await runAsync(
     `INSERT INTO playbooks (id, domain_id, name, is_template, plan_id, week_start, week_end, active_days, import_source, created_at, updated_at)
      VALUES (?, ?, ?, 0, ?, ?, ?, ?, 'chatgpt', ?, ?)`,
     [
@@ -329,7 +322,7 @@ async function savePlaybookFromImport(
   // Create tasks
   let tasksCreated = 0;
   for (let i = 0; i < parsedPlaybook.tasks.length; i++) {
-    await saveTaskFromImport(db, parsedPlaybook.tasks[i], playbookId, i);
+    await saveTaskFromImport(parsedPlaybook.tasks[i], playbookId, i);
     tasksCreated++;
   }
   
@@ -340,7 +333,6 @@ async function savePlaybookFromImport(
  * Save a single task from an import
  */
 async function saveTaskFromImport(
-  db: SQLite.SQLiteDatabase,
   parsedTask: ParsedTask,
   playbookId: string,
   sortOrder: number
@@ -348,7 +340,7 @@ async function saveTaskFromImport(
   const taskId = uuidv4();
   const now = new Date().toISOString();
   
-  await db.runAsync(
+  await runAsync(
     `INSERT INTO tasks (id, playbook_id, title, description, duration_minutes, sort_order, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
@@ -381,23 +373,22 @@ export interface ConflictInfo {
  * Check for conflicts before importing
  */
 export async function checkImportConflicts(
-  db: SQLite.SQLiteDatabase,
   parsedPlan: ParsedPlan
 ): Promise<ConflictInfo[]> {
   const conflicts: ConflictInfo[] = [];
   
   for (const parsedDomain of parsedPlan.domains) {
-    const domain = await getDomainByType(db, parsedDomain.type);
+    const domain = await getDomainByType(parsedDomain.type);
     
     if (domain && domain.activePlaybookId) {
       // Count existing playbooks
-      const countResult = await db.getFirstAsync<{ count: number }>(
+      const countResult = await getFirstAsync<{ count: number }>(
         'SELECT COUNT(*) as count FROM playbooks WHERE domain_id = ?',
         [domain.id]
       );
       
       // Get name of active playbook
-      const activePlaybook = await db.getFirstAsync<{ name: string }>(
+      const activePlaybook = await getFirstAsync<{ name: string }>(
         'SELECT name FROM playbooks WHERE id = ?',
         [domain.activePlaybookId]
       );

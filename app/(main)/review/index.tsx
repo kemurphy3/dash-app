@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, DOMAIN_COLORS } from '../../../src/constants/theme';
 import { Card, ProgressBar } from '../../../src/components';
-import { getDatabase, getWeeklyStats } from '../../../src/db';
+import { getWeeklyStats } from '../../../src/db';
 import { WeeklyStats, DomainStat, DOMAIN_INFO, DomainType } from '../../../src/types';
 import { format, parseISO } from 'date-fns';
 
@@ -22,8 +22,7 @@ export default function ReviewScreen() {
   const loadStats = useCallback(async () => {
     setIsLoading(true);
     try {
-      const db = getDatabase();
-      const weeklyStats = await getWeeklyStats(db);
+      const weeklyStats = await getWeeklyStats();
       setStats(weeklyStats);
     } catch (error) {
       console.error('[Review] Failed to load stats:', error);

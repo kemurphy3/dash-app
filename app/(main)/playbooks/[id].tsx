@@ -38,14 +38,13 @@ export default function PlaybookDetailScreen() {
     if (!id) return;
     
     setIsLoading(true);
-    const db = getDatabase();
-    const data = await getPlaybookWithTasks(db, id);
+    const data = await getPlaybookWithTasks(id);
     
     if (data) {
       setPlaybook(data);
       setEditedName(data.name);
       
-      const domainData = await getDomainById(db, data.domainId);
+      const domainData = await getDomainById(data.domainId);
       setDomain(domainData);
     }
     

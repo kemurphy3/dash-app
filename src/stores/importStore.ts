@@ -9,7 +9,6 @@ import {
   ConflictInfo,
   ImportSaveResult,
 } from '../import';
-import { getDatabase } from '../db';
 import { analytics } from '../utils/analytics';
 
 type ImportStep = 'input' | 'validating' | 'preview' | 'conflicts' | 'saving' | 'success' | 'error';
@@ -133,8 +132,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
     const { parsedPlan } = get();
     if (!parsedPlan) return;
     
-    const db = getDatabase();
-    const conflicts = await checkImportConflicts(db, parsedPlan);
+    const conflicts = await checkImportConflicts(parsedPlan);
     
     if (conflicts.length > 0) {
       // Default all to replace
@@ -168,8 +166,6 @@ export const useImportStore = create<ImportState>((set, get) => ({
     
     set({ step: 'saving' });
     
-    const db = getDatabase();
-    
     // Filter out skipped domains
     const filteredPlan: ParsedPlan = {
       ...parsedPlan,
@@ -187,7 +183,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
       return;
     }
     
-    const result = await saveParsedPlan(db, filteredPlan, true);
+    const result = await saveParsedPlan(filteredPlan, true);
     
     if (result.success) {
       // Track successful import

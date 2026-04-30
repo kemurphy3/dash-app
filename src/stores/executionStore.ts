@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { Domain, Task, TaskLog, TaskStatus, TaskWithStatus, DomainType } from '../types';
 import { 
-  getDatabase,
   getDomains,
   getPlaybookWithTasks,
   getTaskLogsForDate,
@@ -9,6 +8,7 @@ import {
   updateTaskLogStatus,
 } from '../db';
 import { getTodayDateString } from '../utils/date';
+import { calculateSkipDeferralTime } from '../utils/time';
 import { analytics } from '../utils/analytics';
 
 interface DomainExecutionState {
@@ -57,8 +57,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     set({ isLoading: true });
     
     try {
-      const db = getDatabase();
-      const domains = await getDomains(db);
+      const domains = await getDomains();
       const today = getTodayDateString();
       
       const newStates = new Map<string, DomainExecutionState>();
@@ -66,11 +65,11 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       for (const domain of domains) {
         if (!domain.activePlaybookId) continue;
         
-        const playbook = await getPlaybookWithTasks(db, domain.activePlaybookId);
+        const playbook = await getPlaybookWithTasks(domain.activePlaybookId);
         if (!playbook) continue;
         
         // Get or create task logs for today
-        const existingLogs = await getTaskLogsForDate(db, domain.id, today);
+        const existingLogs = await getTaskLogsForDate(domain.id, today);
         const logMap = new Map(existingLogs.map(l => [l.taskId, l]));
         
         // Create TaskWithStatus for each task
@@ -84,7 +83,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
           
           // Create log if doesn't exist
           if (!log) {
-            log = await createOrGetTaskLog(db, task.id, domain.id, today);
+            log = await createOrGetTaskLog(task.id, domain.id, today);
           }
           
           tasksWithStatus.push({
@@ -119,17 +118,16 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
   },
   
   loadDomainState: async (domainId: string) => {
-    const db = getDatabase();
-    const domains = await getDomains(db);
+    const domains = await getDomains();
     const domain = domains.find(d => d.id === domainId);
     
     if (!domain || !domain.activePlaybookId) return;
     
-    const playbook = await getPlaybookWithTasks(db, domain.activePlaybookId);
+    const playbook = await getPlaybookWithTasks(domain.activePlaybookId);
     if (!playbook) return;
     
     const today = getTodayDateString();
-    const existingLogs = await getTaskLogsForDate(db, domain.id, today);
+    const existingLogs = await getTaskLogsForDate(domain.id, today);
     const logMap = new Map(existingLogs.map(l => [l.taskId, l]));
     
     const tasksWithStatus: TaskWithStatus[] = [];
@@ -141,7 +139,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       let log = logMap.get(task.id);
       
       if (!log) {
-        log = await createOrGetTaskLog(db, task.id, domain.id, today);
+        log = await createOrGetTaskLog(task.id, domain.id, today);
       }
       
       tasksWithStatus.push({
@@ -181,8 +179,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     const currentTask = state.tasks[state.currentTaskIndex];
     if (!currentTask || !currentTask.logId) return;
     
-    const db = getDatabase();
-    await updateTaskLogStatus(db, currentTask.logId, 'completed');
+    await updateTaskLogStatus(currentTask.logId, 'completed');
     
     // Track analytics
     analytics.taskCompleted(currentTask.id, state.domain.type);
@@ -232,8 +229,13 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     const currentTask = state.tasks[state.currentTaskIndex];
     if (!currentTask || !currentTask.logId) return;
     
-    const db = getDatabase();
-    await updateTaskLogStatus(db, currentTask.logId, 'skipped');
+    // Calculate deferral time based on skip rule
+    // Before 20:00 → defer +60 minutes, After 20:00 → defer to next day at trigger_time
+    const deferredTime = calculateSkipDeferralTime(state.domain.triggerTime);
+    const deferredTo = deferredTime.toISOString();
+    
+    // Update task log with skipped status and deferral time
+    await updateTaskLogStatus(currentTask.logId, 'skipped', deferredTo);
     
     // Track analytics
     analytics.taskSkipped(currentTask.id, state.domain.type);

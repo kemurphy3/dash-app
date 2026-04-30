@@ -1,7 +1,6 @@
-import * as SQLite from 'expo-sqlite';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format, startOfWeek, isMonday, isSameDay, parseISO } from 'date-fns';
-import { getDatabase } from '../db';
+import { getAllAsync, getFirstAsync, runAsync } from '../db';
 
 const LAST_WEEK_CHECK_KEY = 'dash_last_week_check';
 
@@ -10,7 +9,6 @@ const LAST_WEEK_CHECK_KEY = 'dash_last_week_check';
  * Should be called on every app open
  */
 export async function checkAndAdvanceWeeks(): Promise<{ advanced: boolean; newWeek: number | null }> {
-  const db = getDatabase();
   const today = new Date();
   
   // Get the last time we checked
@@ -27,7 +25,7 @@ export async function checkAndAdvanceWeeks(): Promise<{ advanced: boolean; newWe
   }
   
   // Check if plans table exists (only created after first import)
-  const tableExists = await db.getFirstAsync<{ name: string }>(
+  const tableExists = await getFirstAsync<{ name: string }>(
     "SELECT name FROM sqlite_master WHERE type='table' AND name='plans'"
   );
   
@@ -45,7 +43,7 @@ export async function checkAndAdvanceWeeks(): Promise<{ advanced: boolean; newWe
       console.log('[WeekProgression] New week detected, advancing plans...');
       
       // Get all plans with duration_weeks set
-      const plans = await db.getAllAsync<{
+      const plans = await getAllAsync<{
         id: string;
         name: string;
         duration_weeks: number | null;
@@ -55,14 +53,14 @@ export async function checkAndAdvanceWeeks(): Promise<{ advanced: boolean; newWe
       for (const plan of plans) {
         if (plan.current_week < (plan.duration_weeks || 0)) {
           const newWeek = plan.current_week + 1;
-          await db.runAsync(
+          await runAsync(
             'UPDATE plans SET current_week = ? WHERE id = ?',
             [newWeek, plan.id]
           );
           console.log(`[WeekProgression] Plan "${plan.name}" advanced to week ${newWeek}`);
           
           // Update active playbooks for this plan's domains
-          await updateActivePlaybooksForPlan(db, plan.id, newWeek);
+          await updateActivePlaybooksForPlan(plan.id, newWeek);
         }
       }
       
@@ -87,7 +85,6 @@ export async function checkAndAdvanceWeeks(): Promise<{ advanced: boolean; newWe
  * Update active playbooks for a plan based on current week and day
  */
 async function updateActivePlaybooksForPlan(
-  db: SQLite.SQLiteDatabase, 
   planId: string, 
   currentWeek: number
 ): Promise<void> {
@@ -95,7 +92,7 @@ async function updateActivePlaybooksForPlan(
   const dayOfWeek = format(today, 'EEE').toLowerCase().slice(0, 3); // 'mon', 'tue', etc.
   
   // Get all domains that have playbooks from this plan
-  const domains = await db.getAllAsync<{ id: string }>(
+  const domains = await getAllAsync<{ id: string }>(
     `SELECT DISTINCT d.id 
      FROM domains d 
      JOIN playbooks p ON p.domain_id = d.id 
@@ -105,7 +102,6 @@ async function updateActivePlaybooksForPlan(
   
   for (const domain of domains) {
     const bestPlaybook = await findBestPlaybookForDomain(
-      db, 
       domain.id, 
       planId, 
       currentWeek, 
@@ -113,7 +109,7 @@ async function updateActivePlaybooksForPlan(
     );
     
     if (bestPlaybook) {
-      await db.runAsync(
+      await runAsync(
         'UPDATE domains SET active_playbook_id = ? WHERE id = ?',
         [bestPlaybook.id, domain.id]
       );
@@ -126,14 +122,13 @@ async function updateActivePlaybooksForPlan(
  * Find the best playbook for a domain based on current week and day
  */
 async function findBestPlaybookForDomain(
-  db: SQLite.SQLiteDatabase,
   domainId: string,
   planId: string,
   currentWeek: number,
   dayOfWeek: string
 ): Promise<{ id: string; name: string } | null> {
   // Get all playbooks for this domain and plan
-  const playbooks = await db.getAllAsync<{
+  const playbooks = await getAllAsync<{
     id: string;
     name: string;
     week_start: number | null;
@@ -147,14 +142,26 @@ async function findBestPlaybookForDomain(
   );
   
   // Filter to playbooks that match current week
-  const weekMatches = playbooks.filter(p => {
+  const weekMatches = playbooks.filter((p: {
+    id: string;
+    name: string;
+    week_start: number | null;
+    week_end: number | null;
+    active_days: string | null;
+  }) => {
     if (p.week_start === null) return true; // No week restriction
     const weekEnd = p.week_end || p.week_start;
     return currentWeek >= p.week_start && currentWeek <= weekEnd;
   });
   
   // Filter to playbooks that match current day
-  const dayMatches = weekMatches.filter(p => {
+  const dayMatches = weekMatches.filter((p: {
+    id: string;
+    name: string;
+    week_start: number | null;
+    week_end: number | null;
+    active_days: string | null;
+  }) => {
     if (!p.active_days) return true; // No day restriction
     try {
       const days = JSON.parse(p.active_days) as string[];
@@ -172,7 +179,19 @@ async function findBestPlaybookForDomain(
   }
   
   // Return the most specific match (highest week_start)
-  return candidates.reduce((best, current) => {
+  return candidates.reduce((best: {
+    id: string;
+    name: string;
+    week_start: number | null;
+    week_end: number | null;
+    active_days: string | null;
+  }, current: {
+    id: string;
+    name: string;
+    week_start: number | null;
+    week_end: number | null;
+    active_days: string | null;
+  }) => {
     const bestWeek = best.week_start || 0;
     const currentWeekStart = current.week_start || 0;
     return currentWeekStart > bestWeek ? current : best;
@@ -183,8 +202,7 @@ async function findBestPlaybookForDomain(
  * Get current week for a plan
  */
 export async function getPlanCurrentWeek(planId: string): Promise<number> {
-  const db = getDatabase();
-  const result = await db.getFirstAsync<{ current_week: number }>(
+  const result = await getFirstAsync<{ current_week: number }>(
     'SELECT current_week FROM plans WHERE id = ?',
     [planId]
   );
@@ -196,18 +214,17 @@ export async function getPlanCurrentWeek(planId: string): Promise<number> {
  * Useful when user changes date or after week progression
  */
 export async function refreshActivePlaybooks(): Promise<void> {
-  const db = getDatabase();
   const today = new Date();
   const dayOfWeek = format(today, 'EEE').toLowerCase().slice(0, 3);
   
   // Get all plans
-  const plans = await db.getAllAsync<{
+  const plans = await getAllAsync<{
     id: string;
     current_week: number;
   }>('SELECT id, current_week FROM plans');
   
   for (const plan of plans) {
-    await updateActivePlaybooksForPlan(db, plan.id, plan.current_week);
+    await updateActivePlaybooksForPlan(plan.id, plan.current_week);
   }
   
   console.log('[WeekProgression] Refreshed active playbooks for all domains');

@@ -21,7 +21,7 @@ export function ImportButton({ variant = 'prominent', style }: ImportButtonProps
         activeOpacity={0.7}
       >
         <Text style={styles.subtleIcon}>📥</Text>
-        <Text style={styles.subtleText}>Import from ChatGPT</Text>
+        <Text style={styles.subtleText}>Already have a plan in ChatGPT? Import</Text>
       </TouchableOpacity>
     );
   }
@@ -38,7 +38,7 @@ export function ImportButton({ variant = 'prominent', style }: ImportButtonProps
           <View>
             <Text style={styles.prominentTitle}>Import from ChatGPT</Text>
             <Text style={styles.prominentSubtitle}>
-              Turn any ChatGPT plan into executable actions
+              Already have a plan written with ChatGPT? Import here.
             </Text>
           </View>
         </View>

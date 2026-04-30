@@ -55,7 +55,7 @@ Start by asking me any essential clarifying questions, then build the plan.`;
  * The "Export Existing" prompt - for users who ALREADY have a plan
  * in their ChatGPT conversation and want to convert it to DASH format
  */
-export const EXPORT_EXISTING_PROMPT = `I have a plan we discussed earlier in this conversation. Please convert it to DASH format so I can import it into my execution app.
+export const EXPORT_EXISTING_PROMPT = `I already have a plan in this chat. Please export it in a format readable by DASH so I can import it directly.
 
 **DASH Format Rules:**
 - Domains must be one of: \`morning\`, \`exercise\`, or \`evening\` (pick the best fit for each part of the plan)
@@ -88,6 +88,10 @@ domains:
             description: "Optional additional detail"
             duration: MINUTES
 \`\`\`
+
+Important:
+- Preserve evolving structure (week phases, day filters, and varying tasks by day/week) when the original plan includes it.
+- Do NOT collapse everything into the same daily routine unless the original plan is truly identical each day.
 
 Convert the plan we discussed into this exact format now.`;
 

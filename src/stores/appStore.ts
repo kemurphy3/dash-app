@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { Domain, Playbook, PlaybookWithTasks, Settings, Task, DomainType } from '../types';
 import { 
-  getDatabase, 
   getDomains, 
   getPlaybookWithTasks, 
   getSettings,
@@ -15,6 +14,7 @@ import {
   reorderTasks,
   getTasksForPlaybook,
 } from '../db';
+import { rescheduleDomainNotifications } from '../notifications';
 
 interface AppState {
   // Data
@@ -65,11 +65,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   initialize: async () => {
     try {
       set({ isLoading: true });
-      const db = getDatabase();
       
       const [domains, settings] = await Promise.all([
-        getDomains(db),
-        getSettings(db),
+        getDomains(),
+        getSettings(),
       ]);
       
       set({ 
@@ -87,8 +86,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Refresh domains from database
   refreshDomains: async () => {
     try {
-      const db = getDatabase();
-      const domains = await getDomains(db);
+      const domains = await getDomains();
       set({ domains });
     } catch (error) {
       console.error('[AppStore] Failed to refresh domains:', error);
@@ -98,8 +96,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Refresh settings from database
   refreshSettings: async () => {
     try {
-      const db = getDatabase();
-      const settings = await getSettings(db);
+      const settings = await getSettings();
       set({ settings });
     } catch (error) {
       console.error('[AppStore] Failed to refresh settings:', error);
@@ -108,76 +105,67 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   // Update domain trigger time
   updateTriggerTime: async (domainId: string, time: string) => {
-    const db = getDatabase();
-    await updateDomainTriggerTime(db, domainId, time);
+    await updateDomainTriggerTime(domainId, time);
     await get().refreshDomains();
+    // Reschedule notifications for this domain
+    await rescheduleDomainNotifications(domainId);
   },
   
   // Toggle domain notifications
   toggleDomainNotifications: async (domainId: string, enabled: boolean) => {
-    const db = getDatabase();
-    await updateDomainNotifications(db, domainId, enabled);
+    await updateDomainNotifications(domainId, enabled);
     await get().refreshDomains();
   },
   
   // Set quiet hours
   setQuietHours: async (enabled: boolean, start?: string, end?: string) => {
-    const db = getDatabase();
-    await setSetting(db, 'quiet_hours_enabled', enabled.toString());
-    if (start) await setSetting(db, 'quiet_hours_start', start);
-    if (end) await setSetting(db, 'quiet_hours_end', end);
+    await setSetting('quiet_hours_enabled', enabled.toString());
+    if (start) await setSetting('quiet_hours_start', start);
+    if (end) await setSetting('quiet_hours_end', end);
     await get().refreshSettings();
   },
   
   // Set streaks enabled
   setStreaksEnabled: async (enabled: boolean) => {
-    const db = getDatabase();
-    await setSetting(db, 'streaks_enabled', enabled.toString());
+    await setSetting('streaks_enabled', enabled.toString());
     await get().refreshSettings();
   },
   
   // Complete onboarding
   completeOnboarding: async () => {
-    const db = getDatabase();
-    await setSetting(db, 'has_completed_onboarding', 'true');
+    await setSetting('has_completed_onboarding', 'true');
     await get().refreshSettings();
   },
   
   // Get playbook with tasks
   getPlaybookWithTasks: async (playbookId: string) => {
-    const db = getDatabase();
-    return getPlaybookWithTasks(db, playbookId);
+    return getPlaybookWithTasks(playbookId);
   },
   
   // Rename playbook
   renamePlaybook: async (playbookId: string, name: string) => {
-    const db = getDatabase();
-    await updatePlaybookName(db, playbookId, name);
+    await updatePlaybookName(playbookId, name);
   },
   
   // Add task to playbook
   addTask: async (playbookId: string, title: string, description: string | null, duration: number) => {
-    const db = getDatabase();
-    const tasks = await getTasksForPlaybook(db, playbookId);
+    const tasks = await getTasksForPlaybook(playbookId);
     const sortOrder = tasks.length;
-    return createTask(db, playbookId, title, description, duration, sortOrder);
+    return createTask(playbookId, title, description, duration, sortOrder);
   },
   
   // Edit task
   editTask: async (taskId: string, updates: Partial<Pick<Task, 'title' | 'description' | 'durationMinutes'>>) => {
-    const db = getDatabase();
-    await updateTask(db, taskId, updates);
+    await updateTask(taskId, updates);
   },
   
   // Remove task
   removeTask: async (taskId: string) => {
-    const db = getDatabase();
-    await deleteTask(db, taskId);
+    await deleteTask(taskId);
   },
   
   // Reorder tasks
   reorderPlaybookTasks: async (playbookId: string, taskIds: string[]) => {
-    const db = getDatabase();
-    await reorderTasks(db, taskIds);
+    await reorderTasks(taskIds);
   },
 }));
